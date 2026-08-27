@@ -46,7 +46,7 @@ jobs:
 
       - name: Build mcp-use package
         working-directory: libraries/typescript
-        run: pnpm --filter mcp-use build
+        run: pnpm build
 
       - name: Pack mcp-use artifact
         working-directory: libraries/typescript/packages/server
