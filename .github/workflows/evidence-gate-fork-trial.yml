@@ -1,0 +1,86 @@
+name: mcp-use fork evidence gate trial
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-evidence:
+    name: Verify ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: matching-clean
+            receipt: evidence/evidence-gate-trial/pass.json
+            expected: pass
+          - name: digest-mismatch
+            receipt: evidence/evidence-gate-trial/inconclusive.json
+            expected: inconclusive
+          - name: findings
+            receipt: evidence/evidence-gate-trial/fail.json
+            expected: fail
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+
+      - name: Prepare isolated fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=evidence/evidence-gate-trial
+          mkdir -p "$root"
+          printf '%s\n' 'mcp-use fork trial artifact' > "$root/example-artifact.txt"
+          digest="$(sha256sum "$root/example-artifact.txt" | awk '{print $1}')"
+          scanned_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > "$root/pass.json" <<EOF
+          {
+            "scanner": "mcp-use-fork-trial",
+            "scanned_artifact_digest": "sha256:${digest}",
+            "scan_scope": ["package"],
+            "verdict": "clean",
+            "scanned_at": "${scanned_at}",
+            "attestation": "fork-fixture"
+          }
+          EOF
+          cat > "$root/inconclusive.json" <<EOF
+          {
+            "scanner": "mcp-use-fork-trial",
+            "scanned_artifact_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "scan_scope": ["package"],
+            "verdict": "clean",
+            "scanned_at": "${scanned_at}",
+            "attestation": "fork-fixture"
+          }
+          EOF
+          cat > "$root/fail.json" <<EOF
+          {
+            "scanner": "mcp-use-fork-trial",
+            "scanned_artifact_digest": "sha256:${digest}",
+            "scan_scope": ["package"],
+            "verdict": "findings",
+            "scanned_at": "${scanned_at}",
+            "attestation": "fork-fixture"
+          }
+          EOF
+
+      - name: Verify evidence gate
+        id: evidence
+        continue-on-error: true
+        uses: yandexuanxuan/mcp-evidence-gate@7b1569284e321976b4b61378c223ce6a28fbdb9b
+        with:
+          receipt: ${{ matrix.receipt }}
+          artifact: evidence/evidence-gate-trial/example-artifact.txt
+          policy: permissive
+
+      - name: Assert expected decision
+        if: always()
+        run: |
+          echo "decision=${{ steps.evidence.outputs.decision }}"
+          echo "receipt-verdict=${{ steps.evidence.outputs.receipt-verdict }}"
+          echo "profile=${{ steps.evidence.outputs.profile }}"
+          test "${{ steps.evidence.outputs.decision }}" = "${{ matrix.expected }}"
