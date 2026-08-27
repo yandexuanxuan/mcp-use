@@ -44,7 +44,7 @@ jobs:
             "scan_scope": ["package"],
             "verdict": "clean",
             "scanned_at": "${scanned_at}",
-            "attestation": "fork-fixture"
+            "attestation": "publisher-asserted"
           }
           EOF
           cat > "$root/inconclusive.json" <<EOF
@@ -54,7 +54,7 @@ jobs:
             "scan_scope": ["package"],
             "verdict": "clean",
             "scanned_at": "${scanned_at}",
-            "attestation": "fork-fixture"
+            "attestation": "publisher-asserted"
           }
           EOF
           cat > "$root/fail.json" <<EOF
@@ -64,7 +64,7 @@ jobs:
             "scan_scope": ["package"],
             "verdict": "findings",
             "scanned_at": "${scanned_at}",
-            "attestation": "fork-fixture"
+            "attestation": "publisher-asserted"
           }
           EOF
 
