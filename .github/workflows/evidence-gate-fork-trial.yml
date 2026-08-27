@@ -28,47 +28,70 @@ jobs:
       - name: Checkout fork
         uses: actions/checkout@v4
 
-      - name: Prepare isolated fixtures
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: libraries/typescript/pnpm-lock.yaml
+
+      - name: Install TypeScript dependencies
+        working-directory: libraries/typescript
+        run: pnpm install --frozen-lockfile
+
+      - name: Build mcp-use package
+        working-directory: libraries/typescript
+        run: pnpm --filter mcp-use build
+
+      - name: Pack mcp-use artifact
+        working-directory: libraries/typescript/packages/server
         shell: bash
         run: |
           set -euo pipefail
-          root=evidence/evidence-gate-trial
-          mkdir -p "$root"
-          printf '%s\n' 'mcp-use fork trial artifact' > "$root/example-artifact.txt"
-          digest="$(sha256sum "$root/example-artifact.txt" | awk '{print $1}')"
-          scanned_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          cat > "$root/pass.json" <<EOF
-          {
-            "scanner": "mcp-use-fork-trial",
-            "scanned_artifact_digest": "sha256:${digest}",
-            "scan_scope": ["package"],
-            "verdict": "clean",
-            "scanned_at": "${scanned_at}",
-            "attestation": "publisher-asserted"
-          }
-          EOF
-          cat > "$root/inconclusive.json" <<EOF
-          {
-            "scanner": "mcp-use-fork-trial",
-            "scanned_artifact_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "scan_scope": ["package"],
-            "verdict": "clean",
-            "scanned_at": "${scanned_at}",
-            "attestation": "publisher-asserted"
-          }
-          EOF
-          cat > "$root/fail.json" <<EOF
-          {
-            "scanner": "mcp-use-fork-trial",
-            "scanned_artifact_digest": "sha256:${digest}",
-            "scan_scope": ["package"],
-            "verdict": "findings",
-            "scanned_at": "${scanned_at}",
-            "attestation": "publisher-asserted"
-          }
-          EOF
+          mkdir -p "$GITHUB_WORKSPACE/evidence/evidence-gate-trial"
+          mkdir -p "$RUNNER_TEMP/mcp-use-pack"
+          pnpm pack --pack-destination "$RUNNER_TEMP/mcp-use-pack"
+          cp "$RUNNER_TEMP"/mcp-use-pack/mcp-use-*.tgz "$GITHUB_WORKSPACE/evidence/evidence-gate-trial/mcp-use.tgz"
 
-      - name: Verify evidence gate
+      - name: Prepare receipts from packed artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          import crypto from 'node:crypto'
+          const root = 'evidence/evidence-gate-trial'
+          const artifact = `${root}/mcp-use.tgz`
+          const digest = crypto.createHash('sha256').update(fs.readFileSync(artifact)).digest('hex')
+          const scannedAt = new Date().toISOString()
+          const base = {
+            scanner: 'mcp-use-fork-trial',
+            scan_scope: ['package'],
+            scanned_at: scannedAt,
+            attestation: 'publisher-asserted',
+          }
+          fs.writeFileSync(`${root}/pass.json`, JSON.stringify({
+            ...base,
+            scanned_artifact_digest: `sha256:${digest}`,
+            verdict: 'clean',
+          }, null, 2) + '\n')
+          fs.writeFileSync(`${root}/inconclusive.json`, JSON.stringify({
+            ...base,
+            scanned_artifact_digest: 'sha256:' + '0'.repeat(64),
+            verdict: 'clean',
+          }, null, 2) + '\n')
+          fs.writeFileSync(`${root}/fail.json`, JSON.stringify({
+            ...base,
+            scanned_artifact_digest: `sha256:${digest}`,
+            verdict: 'findings',
+          }, null, 2) + '\n')
+          console.log(`artifact_sha256=sha256:${digest}`)
+          NODE      - name: Verify evidence gate
         id: evidence
         continue-on-error: true
         uses: yandexuanxuan/mcp-evidence-gate@7b1569284e321976b4b61378c223ce6a28fbdb9b
