@@ -65,6 +65,7 @@ jobs:
           node --input-type=module <<'NODE'
           import fs from 'node:fs'
           import crypto from 'node:crypto'
+
           const root = 'evidence/evidence-gate-trial'
           const artifact = `${root}/mcp-use.tgz`
           const digest = crypto.createHash('sha256').update(fs.readFileSync(artifact)).digest('hex')
@@ -75,6 +76,7 @@ jobs:
             scanned_at: scannedAt,
             attestation: 'publisher-asserted',
           }
+
           fs.writeFileSync(`${root}/pass.json`, JSON.stringify({
             ...base,
             scanned_artifact_digest: `sha256:${digest}`,
@@ -91,13 +93,15 @@ jobs:
             verdict: 'findings',
           }, null, 2) + '\n')
           console.log(`artifact_sha256=sha256:${digest}`)
-          NODE      - name: Verify evidence gate
+          NODE
+
+      - name: Verify evidence gate
         id: evidence
         continue-on-error: true
         uses: yandexuanxuan/mcp-evidence-gate@7b1569284e321976b4b61378c223ce6a28fbdb9b
         with:
           receipt: ${{ matrix.receipt }}
-          artifact: evidence/evidence-gate-trial/example-artifact.txt
+          artifact: evidence/evidence-gate-trial/mcp-use.tgz
           policy: permissive
 
       - name: Assert expected decision
